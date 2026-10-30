@@ -38,7 +38,9 @@ export function InviteAdminForm({ companies }: { companies: Company[] }) {
     const result = await inviteHrAdminAction(values);
     if (result.ok) {
       setSuccess(true);
-      setMessage("Invitación enviada y permisos registrados.");
+      setMessage(result.invitationSent === false
+        ? "Cuenta existente habilitada; no se envió un correo."
+        : "Invitación enviada y permisos registrados.");
       router.refresh();
     } else setMessage(result.error);
     setLoading(false);

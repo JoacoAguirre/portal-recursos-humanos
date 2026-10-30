@@ -8,7 +8,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getAuthRedirectUrl } from "@/lib/auth/redirect-url";
 import type { AppRole } from "@/types/database";
 
-export type AdminUserActionResult = { ok: true } | { ok: false; error: string };
+export type AdminUserActionResult = { ok: true; invitationSent?: boolean } | { ok: false; error: string };
 
 const inviteAdminSchema = z.object({
   email: z.string().trim().email().max(254),
@@ -33,6 +33,24 @@ async function getSuperadminClient(): Promise<SuperadminClientResult> {
   return { ok: true, supabase, user };
 }
 
+async function findAuthUserByEmail(admin: ReturnType<typeof createAdminClient>, email: string) {
+  const perPage = 1000;
+  for (let page = 1; page <= 100; page += 1) {
+    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
+    if (error) {
+      console.error("hr_admin_existing_user_lookup_failed", {
+        code: error.code ?? "unknown",
+        status: error.status ?? 0
+      });
+      return { user: null, failed: true };
+    }
+    const user = data.users.find((candidate) => candidate.email?.toLowerCase() === email);
+    if (user) return { user, failed: false };
+    if (data.users.length < perPage) break;
+  }
+  return { user: null, failed: false };
+}
+
 export async function inviteHrAdminAction(input: unknown): Promise<AdminUserActionResult> {
   const parsed = inviteAdminSchema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Revisá los datos del administrador." };
@@ -45,19 +63,46 @@ export async function inviteHrAdminAction(input: unknown): Promise<AdminUserActi
   } catch {
     return { ok: false, error: "Falta configurar la clave de servidor para invitar usuarios." };
   }
-  const { data: invitation, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-    parsed.data.email.toLowerCase(),
-    {
-      data: { first_name: parsed.data.first_name, last_name: parsed.data.last_name },
-      redirectTo: getAuthRedirectUrl("/registro")
-    }
-  );
-  if (inviteError || !invitation.user) {
-    return { ok: false, error: "No se pudo enviar la invitación. Verificá el correo y la configuración de Auth." };
+  const email = parsed.data.email.toLowerCase();
+  const existing = await findAuthUserByEmail(admin, email);
+  if (existing.failed) {
+    return { ok: false, error: "No se pudo verificar si la cuenta ya existe. Revisá Auth e intentá nuevamente." };
   }
 
+  let targetUser = existing.user;
+  let isNewUser = false;
+  if (targetUser && !targetUser.email_confirmed_at) {
+    return { ok: false, error: "La cuenta ya existe, pero el correo no está confirmado. Confirmalo en Auth antes de asignarle acceso." };
+  }
+  if (!targetUser) {
+    const { data: invitation, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
+      email,
+      {
+        data: { first_name: parsed.data.first_name, last_name: parsed.data.last_name },
+        redirectTo: getAuthRedirectUrl("/registro")
+      }
+    );
+    targetUser = invitation.user;
+    isNewUser = Boolean(targetUser);
+    if (inviteError || !targetUser) {
+      const racedUser = await findAuthUserByEmail(admin, email);
+      if (racedUser.failed) {
+        return { ok: false, error: "No se pudo verificar si la cuenta ya existe. Revisá Auth e intentá nuevamente." };
+      }
+      if (!racedUser.user) {
+        return { ok: false, error: "No se pudo enviar la invitación. Verificá el correo y la configuración de Auth." };
+      }
+      if (!racedUser.user.email_confirmed_at) {
+        return { ok: false, error: "La cuenta ya existe, pero el correo no está confirmado. Confirmalo en Auth antes de asignarle acceso." };
+      }
+      targetUser = racedUser.user;
+      isNewUser = false;
+    }
+  }
+
+  if (!targetUser) return { ok: false, error: "No se encontró la cuenta de Auth para asignar el acceso." };
   const { error } = await auth.supabase.rpc("provision_hr_admin", {
-    p_user_id: invitation.user.id,
+    p_user_id: targetUser.id,
     p_company_id: parsed.data.company_id,
     p_first_name: parsed.data.first_name,
     p_last_name: parsed.data.last_name,
@@ -66,15 +111,22 @@ export async function inviteHrAdminAction(input: unknown): Promise<AdminUserActi
     p_can_resolve_requests: parsed.data.can_resolve_requests
   });
   if (error) {
-    const { error: cleanupError } = await admin.auth.admin.deleteUser(invitation.user.id);
-    if (cleanupError) {
-      console.error("hr_admin_invitation_cleanup_failed");
-      return { ok: false, error: "Falló el alta y no se pudo limpiar la invitación. Contactá al administrador del sistema." };
+    if (isNewUser) {
+      const { error: cleanupError } = await admin.auth.admin.deleteUser(targetUser.id);
+      if (cleanupError) {
+        console.error("hr_admin_invitation_cleanup_failed");
+        return { ok: false, error: "Falló el alta y no se pudo limpiar la invitación. Contactá al administrador del sistema." };
+      }
     }
-    return { ok: false, error: "No se pudo asignar el rol y la empresa. La invitación fue cancelada." };
+    return {
+      ok: false,
+      error: isNewUser
+        ? "No se pudo asignar el rol y la empresa. La invitación fue cancelada."
+        : "La cuenta existe, pero no se pudo asignar el rol y la empresa. Revisá si ya tiene un perfil o rol."
+    };
   }
   revalidatePath("/admin/configuracion");
-  return { ok: true };
+  return { ok: true, invitationSent: isNewUser };
 }
 
 export async function resendUserSetupAction(userId: string): Promise<AdminUserActionResult> {
