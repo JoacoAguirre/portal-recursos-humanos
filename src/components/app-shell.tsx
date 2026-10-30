@@ -19,8 +19,8 @@ const employeeLinks = [
   { href: "/portal/solicitudes", label: "Mis solicitudes", icon: ClipboardList },
   { href: "/portal/solicitudes/nueva", label: "Nueva solicitud", icon: BriefcaseBusiness },
   { href: "/portal/documentos", label: "Mis documentos", icon: FileText },
-  { href: "/portal/perfil", label: "Mi perfil", icon: Users },
-  { href: "/portal/notificaciones", label: "Notificaciones", icon: Bell }
+  { href: "/portal/notificaciones", label: "Notificaciones", icon: Bell },
+  { href: "/portal/perfil", label: "Mi perfil", icon: Users }
 ];
 
 const adminLinks = [
