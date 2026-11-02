@@ -1,4 +1,4 @@
-export type AppRole = "EMPLEADO" | "RRHH_ADMIN" | "SUPERADMIN";
+export type AppRole = "EMPLEADO" | "RRHH_ADMIN" | "GERENTE" | "SUPERADMIN";
 export type RequestStatus =
   | "pending"
   | "in_review"
@@ -26,6 +26,7 @@ export type Profile = {
   position: string | null;
   phone: string | null;
   address: string | null;
+  dni: string | null;
   hire_date: string | null;
   onboarding_completed_at: string | null;
   employment_status: "active" | "inactive" | "leave";
@@ -61,6 +62,29 @@ export type Database = {
     Tables: {
       companies: Table<Company>;
       profiles: Table<Profile>;
+      employee_registration_requests: Table<{
+        id: string;
+        auth_user_id: string | null;
+        email: string;
+        first_name: string;
+        last_name: string;
+        dni: string;
+        status: "pending" | "approved" | "rejected";
+        reviewed_by: string | null;
+        reviewed_at: string | null;
+        employee_profile_id: string | null;
+        company_id: string | null;
+        created_at: string;
+      }>;
+      payroll_slips: Table<{
+        id: string;
+        employee_id: string;
+        company_id: string;
+        pay_period: string;
+        storage_path: string;
+        uploaded_by: string;
+        created_at: string;
+      }>;
       requests: Table<RequestRecord>;
       request_comments: Table<{
         id: string;
@@ -173,18 +197,7 @@ export type Database = {
           p_phone?: string | null;
           p_address?: string | null;
           p_hire_date?: string | null;
-        };
-        Returns: Profile;
-      };
-      provision_hr_admin: {
-        Args: {
-          p_user_id: string;
-          p_company_id: string;
-          p_first_name: string;
-          p_last_name: string;
-          p_can_manage_employees?: boolean;
-          p_can_manage_documents?: boolean;
-          p_can_resolve_requests?: boolean;
+          p_dni?: string | null;
         };
         Returns: Profile;
       };
@@ -228,6 +241,19 @@ export type Database = {
       enqueue_document_expiry_notifications: {
         Args: { p_time_zone?: string };
         Returns: number;
+      };
+      review_employee_registration: {
+        Args: {
+          p_registration_id: string;
+          p_approve: boolean;
+          p_company_id?: string | null;
+          p_employee_number?: string | null;
+          p_hire_date?: string | null;
+          p_existing_profile_id?: string | null;
+          p_department?: string | null;
+          p_position?: string | null;
+        };
+        Returns: Database["public"]["Tables"]["employee_registration_requests"]["Row"];
       };
     };
     Enums: {

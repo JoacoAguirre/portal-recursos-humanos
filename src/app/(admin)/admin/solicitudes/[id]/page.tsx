@@ -11,7 +11,7 @@ import { formatDate, requestTypeLabels } from "@/lib/utils";
 import { RequestComment, RequestHistoryEntry } from "@/types/hr";
 
 export default async function AdminRequestDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  await requireUser(["RRHH_ADMIN", "SUPERADMIN"]);
+  const user = await requireUser(["RRHH_ADMIN", "GERENTE", "SUPERADMIN"]);
   const { id } = await params;
   const supabase = await createClient();
   const { data: request, error } = await supabase.from("requests").select("*").eq("id", id).maybeSingle();
@@ -38,8 +38,8 @@ export default async function AdminRequestDetailPage({ params }: { params: Promi
       <div className="grid gap-5 lg:grid-cols-[1.3fr_0.7fr]">
         <div className="space-y-5">
           <Card><CardHeader><CardTitle>Empleado</CardTitle></CardHeader><CardContent><dl className="grid gap-3 sm:grid-cols-2"><Info label="Nombre" value={employee ? `${employee.first_name} ${employee.last_name}` : "Empleado"} /><Info label="Legajo" value={employee?.employee_number ?? "—"} /><Info label="Sector" value={employee?.department ?? "—"} /><Info label="Puesto" value={employee?.position ?? "—"} /></dl></CardContent></Card>
-          <Card><CardHeader><CardTitle>Información enviada</CardTitle></CardHeader><CardContent><dl className="grid gap-3 sm:grid-cols-2">{Object.entries(request.payload).map(([key, value]) => <Info key={key} label={fieldLabel(key)} value={String(value)} />)}<Info label="Fecha de creación" value={formatDate(request.created_at)} /></dl></CardContent></Card>
-          <Card><CardHeader><CardTitle>Resolver solicitud</CardTitle></CardHeader><CardContent><ResolveRequestPanel requestId={request.id} version={request.version} status={request.status} /></CardContent></Card>
+          <Card><CardHeader><CardTitle>Información enviada</CardTitle></CardHeader><CardContent><dl className="grid gap-3 sm:grid-cols-2">{Object.entries(request.payload).map(([key, value]) => <Info key={key} label={fieldLabel(key)} value={key.endsWith("_date") && typeof value === "string" ? formatDate(value) : String(value)} />)}<Info label="Fecha de creación" value={formatDate(request.created_at)} /></dl></CardContent></Card>
+          {user.role !== "GERENTE" && <Card><CardHeader><CardTitle>Resolver solicitud</CardTitle></CardHeader><CardContent><ResolveRequestPanel requestId={request.id} version={request.version} status={request.status} /></CardContent></Card>}
           {!!comments?.length && <Card><CardHeader><CardTitle>Comentarios e historial de revisión</CardTitle></CardHeader><CardContent className="space-y-3">{(comments as RequestComment[]).map((comment) => <div key={comment.id} className={`rounded-lg border p-3 ${comment.internal ? "border-amber-500/20 bg-amber-500/5" : "border-slate-700"}`}><p className="whitespace-pre-wrap text-sm">{comment.body}</p><p className="mt-2 text-xs text-muted-foreground">{comment.internal ? "Nota interna" : "Visible para el empleado"} · {formatDate(comment.created_at)}</p></div>)}</CardContent></Card>}
         </div>
         <Card className="h-fit"><CardHeader><CardTitle className="flex items-center gap-2"><Clock3 className="h-4 w-4" />Trazabilidad</CardTitle></CardHeader><CardContent><ol className="space-y-4">{(history as RequestHistoryEntry[]).map((entry) => <li key={entry.id} className="border-l border-slate-700 pl-4"><p className="text-sm font-medium">{historyLabel(entry.action)}</p><p className="mt-1 text-xs text-muted-foreground">{formatDate(entry.created_at)}</p></li>)}</ol></CardContent></Card>

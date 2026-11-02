@@ -13,8 +13,8 @@ import {
 import { Company } from "@/types/database";
 
 const csvTemplate = [
-  "email,first_name,last_name,employee_number,company_code,department,position,phone,address,hire_date",
-  "ana@example.com,Ana,Pérez,E-001,IVVT,Ventas,Analista,1122334455,\"Calle 123, Buenos Aires\",2024-01-15"
+  "email,first_name,last_name,dni,employee_number,company_code,department,position,phone,address,hire_date",
+  "ana@example.com,Ana,Pérez,30123456,E-001,IVVT,Ventas,Analista,1122334455,\"Calle 123, Buenos Aires\",2024-01-15"
 ].join("\n");
 
 type ImportReport = { line: number; success: boolean; message: string };
@@ -134,7 +134,7 @@ export function EmployeeCsvImportForm({ companies }: { companies: Company[] }) {
               <div className="overflow-x-auto">
                 <table className="w-full min-w-[700px] text-left text-sm">
                   <thead className="border-b border-slate-700 text-xs uppercase text-muted-foreground">
-                    <tr><th className="px-3 py-2">Fila</th><th className="px-3 py-2">Correo</th><th className="px-3 py-2">Legajo</th><th className="px-3 py-2">Empresa</th><th className="px-3 py-2">Validación</th></tr>
+                    <tr><th className="px-3 py-2">Fila</th><th className="px-3 py-2">Correo</th><th className="px-3 py-2">DNI</th><th className="px-3 py-2">Legajo</th><th className="px-3 py-2">Empresa</th><th className="px-3 py-2">Validación</th></tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700">
                     {rows.map((row) => {
@@ -144,6 +144,7 @@ export function EmployeeCsvImportForm({ companies }: { companies: Company[] }) {
                         <tr key={row.line}>
                           <td className="px-3 py-2">{row.line}</td>
                           <td className="px-3 py-2">{row.data?.email ?? "—"}</td>
+                          <td className="px-3 py-2">{row.data?.dni ?? "—"}</td>
                           <td className="px-3 py-2">{row.data?.employee_number ?? "—"}</td>
                           <td className="px-3 py-2">{row.data?.company_code ?? "—"}</td>
                           <td className={`px-3 py-2 ${row.error || !companyAllowed ? "text-red-300" : "text-emerald-300"}`}>{message}</td>

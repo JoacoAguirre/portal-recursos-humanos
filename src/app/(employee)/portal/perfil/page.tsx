@@ -5,18 +5,24 @@ import { createClient } from "@/lib/supabase/server";
 import { formatDate } from "@/lib/utils";
 import { PersonalDataChangeForm } from "@/components/profile/personal-data-change-form";
 
-export default async function EmployeeProfilePage({ searchParams }: { searchParams: Promise<{ solicitud?: string }> }) {
+export default async function EmployeeProfilePage({ searchParams }: { searchParams: Promise<{ solicitud?: string; cambio?: string }> }) {
   const user = await requireUser(["EMPLEADO"]);
   const params = await searchParams;
   const supabase = await createClient();
   const { data: profile, error } = await supabase.from("profiles").select("*").eq("id", user.id).maybeSingle();
   if (error) throw new Error("No se pudo consultar tu perfil.");
   if (!profile) notFound();
-  const { data: changes, error: changesError } = await supabase
+  let changesQuery = supabase
     .from("personal_data_change_requests")
     .select("id, requested_data, status, review_comment, created_at")
     .order("created_at", { ascending: false })
     .limit(10);
+  if (params.cambio && /^[0-9a-f-]{36}$/i.test(params.cambio)) {
+    changesQuery = supabase.from("personal_data_change_requests")
+      .select("id, requested_data, status, review_comment, created_at")
+      .eq("id", params.cambio);
+  }
+  const { data: changes, error: changesError } = await changesQuery;
   if (changesError) throw new Error("No se pudo consultar el historial de cambios.");
 
   return (
@@ -40,7 +46,7 @@ export default async function EmployeeProfilePage({ searchParams }: { searchPara
       <Card><CardHeader><CardTitle>Solicitudes de cambio recientes</CardTitle></CardHeader><CardContent>
         {!changes?.length ? <p className="text-sm text-muted-foreground">No hay solicitudes de cambio registradas.</p> : (
           <div className="divide-y divide-slate-700">{changes.map((change) => (
-            <div key={change.id} className="flex flex-wrap justify-between gap-2 py-3 first:pt-0">
+            <div id={change.id} key={change.id} className={`flex flex-wrap justify-between gap-2 py-3 first:pt-0 ${params.cambio === change.id ? "rounded-lg bg-blue-500/10 px-3" : ""}`}>
               <div><p className="text-sm font-medium">Actualización de datos personales</p><p className="mt-1 text-xs text-muted-foreground">{formatDate(change.created_at)}</p></div>
               <div className="text-right"><span className="text-sm capitalize text-slate-300">{change.status.replace("_", " ")}</span>{change.review_comment && <p className="mt-1 max-w-xs text-xs text-muted-foreground">{change.review_comment}</p>}</div>
             </div>

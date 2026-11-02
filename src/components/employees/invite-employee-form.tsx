@@ -7,6 +7,7 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { inviteEmployeeAction } from "@/app/actions/employees";
 import { Button } from "@/components/ui/button";
+import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Company } from "@/types/database";
 
@@ -14,13 +15,14 @@ const schema = z.object({
   email: z.string().email(),
   first_name: z.string().min(1),
   last_name: z.string().min(1),
+  dni: z.string().regex(/^[0-9]{7,8}$/),
   employee_number: z.string().min(1),
   company_id: z.string().uuid(),
   department: z.string().optional(),
   position: z.string().optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
-  hire_date: z.string().optional()
+  hire_date: z.string().date()
 });
 type Values = z.infer<typeof schema>;
 
@@ -52,6 +54,7 @@ export function InviteEmployeeForm({ companies }: { companies: Company[] }) {
         <Field name="first_name" label="Nombre" register={register} error={errors.first_name?.message} required />
         <Field name="last_name" label="Apellido" register={register} error={errors.last_name?.message} required />
         <Field name="email" label="Correo de invitación" register={register} error={errors.email?.message} type="email" required />
+        <Field name="dni" label="DNI (solo números)" register={register} error={errors.dni?.message} required />
         <Field name="employee_number" label="Legajo" register={register} error={errors.employee_number?.message} required />
         <div className="space-y-2 sm:col-span-2">
           <label htmlFor="company_id" className="text-sm font-medium">Empresa</label>
@@ -63,7 +66,7 @@ export function InviteEmployeeForm({ companies }: { companies: Company[] }) {
         </div>
         <Field name="department" label="Sector" register={register} />
         <Field name="position" label="Puesto" register={register} />
-        <Field name="hire_date" label="Fecha de ingreso" register={register} type="date" />
+        <Field name="hire_date" label="Fecha de ingreso" register={register} error={errors.hire_date?.message} type="date" required />
         <Field name="phone" label="Teléfono" register={register} />
         <Field name="address" label="Domicilio" register={register} />
       </div>
@@ -89,5 +92,5 @@ function Field({
   required?: boolean;
 }) {
   const id = String(name);
-  return <div className="space-y-2"><label htmlFor={id} className="text-sm font-medium">{label}{required && " *"}</label><Input id={id} type={type} {...register(name)} />{error && <p className="text-xs text-red-400">{error}</p>}</div>;
+  return <div className="space-y-2"><label htmlFor={id} className="text-sm font-medium">{label}{required && " *"}</label>{type === "date" ? <DateInput id={id} {...register(name)} /> : <Input id={id} type={type} {...register(name)} />}{error && <p className="text-xs text-red-400">{error}</p>}</div>;
 }

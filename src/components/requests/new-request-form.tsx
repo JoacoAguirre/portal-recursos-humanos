@@ -9,9 +9,16 @@ import { createRequestAction, submitPersonalDataChangeAction } from "@/app/actio
 import { validateRequestPayload } from "@/lib/validations/requests";
 import { ActionResult } from "@/app/actions/requests";
 import { Button } from "@/components/ui/button";
+import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { EppItem } from "@/types/hr";
+import {
+  calendarDaysByYear,
+  getReservedVacationDays,
+  getVacationEntitlement,
+  type VacationRequestPeriod
+} from "@/lib/vacations";
 
 const formSchema = z.object({
   request_type: z.enum(["leave", "vacation", "epp", "personal_data", "other"]),
@@ -38,7 +45,17 @@ const labels = {
   other: "Otra solicitud"
 } as const;
 
-export function NewRequestForm({ catalog }: { catalog: EppItem[] }) {
+export function NewRequestForm({
+  catalog,
+  minimumDate,
+  hireDate,
+  vacationRequests
+}: {
+  catalog: EppItem[];
+  minimumDate: string;
+  hireDate: string | null;
+  vacationRequests: VacationRequestPeriod[];
+}) {
   const router = useRouter();
   const [message, setMessage] = useState("");
   const [success, setSuccess] = useState(false);
@@ -60,6 +77,20 @@ export function NewRequestForm({ catalog }: { catalog: EppItem[] }) {
     if (!start || !end || end < start) return null;
     return Math.round((Date.parse(`${end}T12:00:00Z`) - Date.parse(`${start}T12:00:00Z`)) / 86400000) + 1;
   }, [start, end]);
+  const yearlyBalances = useMemo(() => {
+    if (!start || !end || end < start) return [];
+    return calendarDaysByYear(start, end).map(({ year, days }) => {
+      const entitlement = getVacationEntitlement(hireDate, year);
+      const reserved = getReservedVacationDays(vacationRequests, year);
+      return {
+        year,
+        days,
+        entitlement: entitlement.days,
+        requiresReview: entitlement.requiresReview,
+        remaining: entitlement.days === null ? null : Math.max(entitlement.days - reserved, 0)
+      };
+    });
+  }, [start, end, hireDate, vacationRequests]);
 
   function showFieldErrors(result: ReturnType<typeof validateRequestPayload>) {
     if (result.success) return false;
@@ -76,6 +107,22 @@ export function NewRequestForm({ catalog }: { catalog: EppItem[] }) {
   async function onSubmit(values: FormValues) {
     setMessage("");
     setSuccess(false);
+    if (
+      (type === "leave" || type === "vacation") &&
+      values.start_date &&
+      values.start_date < minimumDate
+    ) {
+      setError("start_date", { message: "La fecha debe ser al menos 30 días posterior a hoy." });
+      setMessage("Las solicitudes deben presentarse con al menos 30 días de anticipación.");
+      return;
+    }
+    if (
+      type === "vacation" &&
+      yearlyBalances.some((balance) => balance.remaining !== null && balance.days > balance.remaining)
+    ) {
+      setMessage("El período supera los días de vacaciones disponibles para alguno de los años solicitados.");
+      return;
+    }
     const payload: Record<string, unknown> = {};
     if (type === "leave") {
       Object.assign(payload, {
@@ -153,7 +200,7 @@ export function NewRequestForm({ catalog }: { catalog: EppItem[] }) {
             <Input id="leave_type" placeholder="Ej.: trámite personal" {...register("leave_type")} />
             {fieldError("leave_type") && <p className="text-xs text-red-400">{fieldError("leave_type")}</p>}
           </div>
-          <DateFields register={register} fieldError={fieldError} includeEnd />
+          <DateFields register={register} fieldError={fieldError} includeEnd minimumDate={minimumDate} />
           <TextField name="reason" label="Motivo" register={register} fieldError={fieldError} required />
           <TextField name="observations" label="Observaciones" register={register} fieldError={fieldError} multiline />
         </>
@@ -161,10 +208,16 @@ export function NewRequestForm({ catalog }: { catalog: EppItem[] }) {
 
       {type === "vacation" && (
         <>
-          <DateFields register={register} fieldError={fieldError} includeEnd />
+          <DateFields register={register} fieldError={fieldError} includeEnd minimumDate={minimumDate} />
           <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-4 py-3 text-sm">
             Días calendario estimados: <strong>{calendarDays ?? "—"}</strong>
-            <span className="mt-1 block text-xs text-muted-foreground">Es un cálculo inclusivo de días calendario, no representa un saldo ni reemplaza las reglas laborales aplicables.</span>
+            {yearlyBalances.length ? yearlyBalances.map((balance) => (
+              <span key={balance.year} className="mt-1 block text-xs text-muted-foreground">
+                {balance.requiresReview
+                  ? `${balance.year}: antigüedad menor a seis meses o fecha de ingreso pendiente; RR. HH. revisará la solicitud.`
+                  : `${balance.year}: ${balance.entitlement} días anuales; ${balance.remaining} disponibles antes de este pedido.`}
+              </span>
+            )) : <span className="mt-1 block text-xs text-muted-foreground">El saldo anual se calcula según la antigüedad al 31 de diciembre.</span>}
           </div>
           <TextField name="observations" label="Observaciones" register={register} fieldError={fieldError} multiline />
         </>
@@ -220,23 +273,25 @@ export function NewRequestForm({ catalog }: { catalog: EppItem[] }) {
 function DateFields({
   register,
   fieldError,
-  includeEnd
+  includeEnd,
+  minimumDate
 }: {
   register: ReturnType<typeof useForm<FormValues>>["register"];
   fieldError: (name: keyof FormValues) => string | undefined;
   includeEnd: boolean;
+  minimumDate: string;
 }) {
   return (
     <div className="grid gap-4 sm:grid-cols-2">
       <div className="space-y-2">
         <label htmlFor="start_date" className="text-sm font-medium">Fecha desde</label>
-        <Input id="start_date" type="date" {...register("start_date")} />
+        <DateInput id="start_date" min={minimumDate} {...register("start_date")} />
         {fieldError("start_date") && <p className="text-xs text-red-400">{fieldError("start_date")}</p>}
       </div>
       {includeEnd && (
         <div className="space-y-2">
           <label htmlFor="end_date" className="text-sm font-medium">Fecha hasta</label>
-          <Input id="end_date" type="date" {...register("end_date")} />
+          <DateInput id="end_date" min={minimumDate} {...register("end_date")} />
           {fieldError("end_date") && <p className="text-xs text-red-400">{fieldError("end_date")}</p>}
         </div>
       )}

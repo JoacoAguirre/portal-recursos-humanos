@@ -7,18 +7,20 @@ import { useForm } from "react-hook-form";
 import { z } from "zod";
 import { updateEmployeeProfileAction } from "@/app/actions/employees";
 import { Button } from "@/components/ui/button";
+import { DateInput } from "@/components/ui/date-input";
 import { Input } from "@/components/ui/input";
 import { Profile } from "@/types/database";
 
 const schema = z.object({
   first_name: z.string().trim().min(1),
   last_name: z.string().trim().min(1),
+  dni: z.string().trim().regex(/^[0-9]{7,8}$/),
   employee_number: z.string().trim().min(1),
   department: z.string().trim(),
   position: z.string().trim(),
   phone: z.string().trim(),
   address: z.string().trim(),
-  hire_date: z.string()
+  hire_date: z.string().date()
 });
 type Values = z.infer<typeof schema>;
 
@@ -31,6 +33,7 @@ export function EditEmployeeForm({ profile }: { profile: Profile }) {
     defaultValues: {
       first_name: profile.first_name,
       last_name: profile.last_name,
+      dni: profile.dni ?? "",
       employee_number: profile.employee_number ?? "",
       department: profile.department ?? "",
       position: profile.position ?? "",
@@ -55,10 +58,11 @@ export function EditEmployeeForm({ profile }: { profile: Profile }) {
     <div className="grid gap-4 sm:grid-cols-2">
       <Field name="first_name" label="Nombre" register={register} error={errors.first_name?.message} />
       <Field name="last_name" label="Apellido" register={register} error={errors.last_name?.message} />
+      <Field name="dni" label="DNI (solo números)" register={register} error={errors.dni?.message} />
       <Field name="employee_number" label="Legajo" register={register} error={errors.employee_number?.message} />
       <Field name="department" label="Sector" register={register} />
       <Field name="position" label="Puesto" register={register} />
-      <Field name="hire_date" label="Fecha de ingreso" register={register} type="date" />
+      <Field name="hire_date" label="Fecha de ingreso" register={register} error={errors.hire_date?.message} type="date" defaultValue={profile.hire_date ?? ""} />
       <Field name="phone" label="Teléfono" register={register} />
       <Field name="address" label="Domicilio" register={register} />
     </div>
@@ -68,14 +72,15 @@ export function EditEmployeeForm({ profile }: { profile: Profile }) {
 }
 
 function Field({
-  name, label, register, error, type = "text"
+  name, label, register, error, type = "text", defaultValue
 }: {
   name: keyof Values;
   label: string;
   register: ReturnType<typeof useForm<Values>>["register"];
   error?: string;
   type?: string;
+  defaultValue?: string;
 }) {
   const id = `edit-${String(name)}`;
-  return <div className="space-y-2"><label htmlFor={id} className="text-sm font-medium">{label}</label><Input id={id} type={type} {...register(name)} />{error && <p className="text-xs text-red-400">{error}</p>}</div>;
+  return <div className="space-y-2"><label htmlFor={id} className="text-sm font-medium">{label}</label>{type === "date" ? <DateInput id={id} defaultValue={defaultValue} {...register(name)} /> : <Input id={id} type={type} {...register(name)} />}{error && <p className="text-xs text-red-400">{error}</p>}</div>;
 }

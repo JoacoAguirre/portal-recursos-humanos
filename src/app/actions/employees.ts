@@ -15,13 +15,14 @@ const employeeInvitationSchema = z.object({
   email: z.string().trim().email().max(254),
   first_name: z.string().trim().min(1).max(100),
   last_name: z.string().trim().min(1).max(100),
+  dni: z.string().trim().regex(/^[0-9]{7,8}$/),
   employee_number: z.string().trim().min(1).max(60),
   company_id: z.string().uuid(),
   department: z.string().trim().max(120).optional(),
   position: z.string().trim().max(120).optional(),
   phone: z.string().trim().max(40).optional(),
   address: z.string().trim().max(300).optional(),
-  hire_date: z.string().date().optional().or(z.literal(""))
+  hire_date: z.string().date()
 });
 
 export type EmployeeActionResult = { ok: true } | { ok: false; error: string };
@@ -60,7 +61,7 @@ async function inviteEmployee(
     employee.email.toLowerCase(),
     {
       data: { first_name: employee.first_name, last_name: employee.last_name },
-      redirectTo: getAuthRedirectUrl("/registro")
+      redirectTo: getAuthRedirectUrl("/completar-alta")
     }
   );
   if (inviteError || !invitation.user) {
@@ -77,7 +78,8 @@ async function inviteEmployee(
     p_position: employee.position ?? null,
     p_phone: employee.phone ?? null,
     p_address: employee.address ?? null,
-    p_hire_date: employee.hire_date || null
+    p_hire_date: employee.hire_date,
+    p_dni: employee.dni
   });
 
   if (profileError) {
@@ -91,7 +93,7 @@ async function inviteEmployee(
       error: profileError.code === "42501"
         ? "No tenés permiso para administrar empleados en esa empresa."
         : profileError.code === "23505"
-          ? "El legajo ya existe."
+          ? "El DNI o el legajo ya existe."
           : "No se pudo crear el perfil del empleado."
     };
   }
@@ -219,11 +221,12 @@ const employeeUpdateSchema = z.object({
   first_name: z.string().trim().min(1).max(100),
   last_name: z.string().trim().min(1).max(100),
   employee_number: z.string().trim().min(1).max(60),
+  dni: z.string().trim().regex(/^[0-9]{7,8}$/),
   department: z.string().trim().max(120),
   position: z.string().trim().max(120),
   phone: z.string().trim().max(40),
   address: z.string().trim().max(300),
-  hire_date: z.string().date().optional().or(z.literal(""))
+  hire_date: z.string().date()
 });
 
 export async function updateEmployeeProfileAction(input: unknown): Promise<EmployeeActionResult> {
@@ -248,6 +251,7 @@ export async function updateEmployeeProfileAction(input: unknown): Promise<Emplo
       first_name: parsed.data.first_name,
       last_name: parsed.data.last_name,
       employee_number: parsed.data.employee_number,
+      dni: parsed.data.dni,
       department: parsed.data.department || null,
       position: parsed.data.position || null,
       phone: parsed.data.phone || null,
@@ -257,7 +261,12 @@ export async function updateEmployeeProfileAction(input: unknown): Promise<Emplo
     .eq("id", parsed.data.id)
     .select("id")
     .maybeSingle();
-  if (error || !data) return { ok: false, error: error?.code === "23505" ? "Ese legajo ya existe." : "No tenés permiso para editar este legajo." };
+  if (error || !data) return {
+    ok: false,
+    error: error?.code === "23505"
+      ? "El DNI o el legajo ya pertenece a otro empleado."
+      : "No tenés permiso para editar este legajo."
+  };
   revalidatePath("/admin/empleados");
   revalidatePath(`/admin/empleados/${parsed.data.id}`);
   return { ok: true };

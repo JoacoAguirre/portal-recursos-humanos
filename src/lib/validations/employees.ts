@@ -10,13 +10,14 @@ export const employeeImportRowSchema = z.object({
   email: z.string().trim().email().max(254).transform((value) => value.toLowerCase()),
   first_name: z.string().trim().min(1).max(100),
   last_name: z.string().trim().min(1).max(100),
+  dni: z.string().trim().regex(/^[0-9]{7,8}$/),
   employee_number: z.string().trim().min(1).max(60),
   company_code: z.string().trim().min(1).max(20).transform((value) => value.toUpperCase()),
   department: z.string().trim().max(120).optional(),
   position: z.string().trim().max(120).optional(),
   phone: z.string().trim().max(40).optional(),
   address: z.string().trim().max(300).optional(),
-  hire_date: dateSchema.optional()
+  hire_date: dateSchema
 });
 
 export type EmployeeImportRow = z.infer<typeof employeeImportRowSchema>;
@@ -33,6 +34,7 @@ export function findEmployeeImportDuplicateErrors(
   const errors = new Map<number, string>();
   const indexesByEmail = new Map<string, number[]>();
   const indexesByEmployeeNumber = new Map<string, number[]>();
+  const indexesByDni = new Map<string, number[]>();
 
   for (const row of rows) {
     const email = row.data.email.toLowerCase();
@@ -42,6 +44,7 @@ export function findEmployeeImportDuplicateErrors(
       employeeNumber,
       [...(indexesByEmployeeNumber.get(employeeNumber) ?? []), row.line]
     );
+    indexesByDni.set(row.data.dni, [...(indexesByDni.get(row.data.dni) ?? []), row.line]);
   }
   for (const lineNumbers of indexesByEmail.values()) {
     if (lineNumbers.length > 1) {
@@ -52,11 +55,16 @@ export function findEmployeeImportDuplicateErrors(
     if (lineNumbers.length > 1) {
       for (const line of lineNumbers) errors.set(line, "El legajo está duplicado en el archivo.");
     }
+    for (const lineNumbers of indexesByDni.values()) {
+      if (lineNumbers.length > 1) {
+        for (const line of lineNumbers) errors.set(line, "El DNI está duplicado en el archivo.");
+      }
+    }
   }
   return errors;
 }
 
-const requiredHeaders = ["email", "first_name", "last_name", "employee_number", "company_code"];
+const requiredHeaders = ["email", "first_name", "last_name", "dni", "employee_number", "company_code", "hire_date"];
 const allowedHeaders = new Set([
   ...requiredHeaders,
   "department",

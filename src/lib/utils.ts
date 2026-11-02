@@ -60,6 +60,19 @@ export function addCalendarDays(value: string, days: number) {
   return date.toISOString().slice(0, 10);
 }
 
+export function isDateAtLeastDaysAhead(value: string, today: string, days: number) {
+  return value >= addCalendarDays(today, days);
+}
+
+export function subtractCalendarYears(value: string, years: number) {
+  const date = new Date(`${value}T12:00:00Z`);
+  if (Number.isNaN(date.getTime()) || !Number.isInteger(years)) return value;
+  const targetYear = date.getUTCFullYear() - years;
+  const month = date.getUTCMonth();
+  const day = Math.min(date.getUTCDate(), new Date(Date.UTC(targetYear, month + 1, 0)).getUTCDate());
+  return `${targetYear}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
+}
+
 export function getErrorMessage(error: unknown, fallback: string) {
   if (error instanceof Error && error.message) return error.message;
   return fallback;

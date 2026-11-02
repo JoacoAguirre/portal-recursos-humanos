@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 
 const schema = z.object({
-  password: z.string().min(12, "La contraseña debe tener al menos 12 caracteres."),
+  password: z.string().min(8, "La contraseña debe tener al menos 8 caracteres."),
   confirm: z.string()
 }).refine((value) => value.password === value.confirm, {
   path: ["confirm"],

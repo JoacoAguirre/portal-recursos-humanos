@@ -41,7 +41,7 @@ export default async function RequestDetailPage({ params }: { params: Promise<{ 
               {payload.map(([key, value]) => (
                 <div key={key} className="rounded-lg bg-slate-900/60 p-3">
                   <dt className="text-xs text-muted-foreground">{fieldLabel(key)}</dt>
-                  <dd className="mt-1 whitespace-pre-wrap break-words text-sm">{String(value)}</dd>
+                  <dd className="mt-1 whitespace-pre-wrap break-words text-sm">{key.endsWith("_date") && typeof value === "string" ? formatDate(value) : String(value)}</dd>
                 </div>
               ))}
               <div className="rounded-lg bg-slate-900/60 p-3"><dt className="text-xs text-muted-foreground">Fecha de creación</dt><dd className="mt-1 text-sm">{formatDate(request.created_at)}</dd></div>

@@ -30,6 +30,9 @@ export default function LoginPage() {
           <h2 className="text-2xl font-semibold">Iniciá sesión</h2>
           <p className="mt-2 text-sm text-muted-foreground">Ingresá con tu cuenta corporativa.</p>
           <LoginForm />
+          <p className="mt-5 text-center text-sm text-muted-foreground">
+            ¿Todavía no tenés cuenta? <a href="/registro" className="text-blue-300 hover:text-blue-200">Registrate</a>
+          </p>
           <p className="mt-8 text-center text-xs leading-5 text-slate-500">
             ¿Necesitás ayuda? Contactá al equipo de Recursos Humanos de tu empresa.
           </p>

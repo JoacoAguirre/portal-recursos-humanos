@@ -33,6 +33,7 @@ type CompanyAccess = {
 const roleLabels: Record<AppRole, string> = {
   EMPLEADO: "Empleado",
   RRHH_ADMIN: "Administrador de RR. HH.",
+  GERENTE: "Gerente (solo lectura)",
   SUPERADMIN: "Superadministrador"
 };
 
@@ -139,8 +140,8 @@ export function RegistrationForm() {
     event.preventDefault();
     setError("");
     if (!profile || !role) return;
-    if (password.length < 12 || password.length > 128) {
-      setError("La contraseña debe tener entre 12 y 128 caracteres.");
+    if (password.length < 8 || password.length > 128) {
+      setError("La contraseña debe tener entre 8 y 128 caracteres.");
       return;
     }
     if (password !== confirmPassword) {

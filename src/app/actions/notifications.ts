@@ -9,6 +9,10 @@ export async function markNotificationReadAction(id: string) {
   const supabase = await createClient();
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   if (userError || !user) return { ok: false as const, error: "Tu sesión venció." };
+  const { data: role, error: roleError } = await supabase.rpc("get_my_role");
+  if (roleError || !role || role === "GERENTE") {
+    return { ok: false as const, error: "El rol GERENTE tiene acceso de solo lectura." };
+  }
   const { data, error } = await supabase
     .from("notifications")
     .update({ read_at: new Date().toISOString() })

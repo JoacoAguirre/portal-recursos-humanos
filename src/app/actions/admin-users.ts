@@ -3,22 +3,11 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import type { User } from "@supabase/supabase-js";
-import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { getAuthRedirectUrl } from "@/lib/auth/redirect-url";
+import { createClient } from "@/lib/supabase/server";
 import type { AppRole } from "@/types/database";
 
-export type AdminUserActionResult = { ok: true; invitationSent?: boolean } | { ok: false; error: string };
-
-const inviteAdminSchema = z.object({
-  email: z.string().trim().email().max(254),
-  first_name: z.string().trim().min(1).max(100),
-  last_name: z.string().trim().min(1).max(100),
-  company_id: z.string().uuid(),
-  can_manage_employees: z.boolean(),
-  can_manage_documents: z.boolean(),
-  can_resolve_requests: z.boolean()
-});
+export type AdminUserActionResult = { ok: true } | { ok: false; error: string };
 
 type SuperadminClientResult =
   | { ok: true; supabase: Awaited<ReturnType<typeof createClient>>; user: User }
@@ -31,102 +20,6 @@ async function getSuperadminClient(): Promise<SuperadminClientResult> {
   const { data: role, error: roleError } = await supabase.rpc("get_my_role");
   if (roleError || role !== "SUPERADMIN") return { ok: false, error: "Solo SUPERADMIN puede gestionar usuarios." };
   return { ok: true, supabase, user };
-}
-
-async function findAuthUserByEmail(admin: ReturnType<typeof createAdminClient>, email: string) {
-  const perPage = 1000;
-  for (let page = 1; page <= 100; page += 1) {
-    const { data, error } = await admin.auth.admin.listUsers({ page, perPage });
-    if (error) {
-      console.error("hr_admin_existing_user_lookup_failed", {
-        code: error.code ?? "unknown",
-        status: error.status ?? 0
-      });
-      return { user: null, failed: true };
-    }
-    const user = data.users.find((candidate) => candidate.email?.toLowerCase() === email);
-    if (user) return { user, failed: false };
-    if (data.users.length < perPage) break;
-  }
-  return { user: null, failed: false };
-}
-
-export async function inviteHrAdminAction(input: unknown): Promise<AdminUserActionResult> {
-  const parsed = inviteAdminSchema.safeParse(input);
-  if (!parsed.success) return { ok: false, error: "Revisá los datos del administrador." };
-  const auth = await getSuperadminClient();
-  if (!auth.ok) return { ok: false, error: auth.error };
-
-  let admin: ReturnType<typeof createAdminClient>;
-  try {
-    admin = createAdminClient();
-  } catch {
-    return { ok: false, error: "Falta configurar la clave de servidor para invitar usuarios." };
-  }
-  const email = parsed.data.email.toLowerCase();
-  const existing = await findAuthUserByEmail(admin, email);
-  if (existing.failed) {
-    return { ok: false, error: "No se pudo verificar si la cuenta ya existe. Revisá Auth e intentá nuevamente." };
-  }
-
-  let targetUser = existing.user;
-  let isNewUser = false;
-  if (targetUser && !targetUser.email_confirmed_at) {
-    return { ok: false, error: "La cuenta ya existe, pero el correo no está confirmado. Confirmalo en Auth antes de asignarle acceso." };
-  }
-  if (!targetUser) {
-    const { data: invitation, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
-      email,
-      {
-        data: { first_name: parsed.data.first_name, last_name: parsed.data.last_name },
-        redirectTo: getAuthRedirectUrl("/registro")
-      }
-    );
-    targetUser = invitation.user;
-    isNewUser = Boolean(targetUser);
-    if (inviteError || !targetUser) {
-      const racedUser = await findAuthUserByEmail(admin, email);
-      if (racedUser.failed) {
-        return { ok: false, error: "No se pudo verificar si la cuenta ya existe. Revisá Auth e intentá nuevamente." };
-      }
-      if (!racedUser.user) {
-        return { ok: false, error: "No se pudo enviar la invitación. Verificá el correo y la configuración de Auth." };
-      }
-      if (!racedUser.user.email_confirmed_at) {
-        return { ok: false, error: "La cuenta ya existe, pero el correo no está confirmado. Confirmalo en Auth antes de asignarle acceso." };
-      }
-      targetUser = racedUser.user;
-      isNewUser = false;
-    }
-  }
-
-  if (!targetUser) return { ok: false, error: "No se encontró la cuenta de Auth para asignar el acceso." };
-  const { error } = await auth.supabase.rpc("provision_hr_admin", {
-    p_user_id: targetUser.id,
-    p_company_id: parsed.data.company_id,
-    p_first_name: parsed.data.first_name,
-    p_last_name: parsed.data.last_name,
-    p_can_manage_employees: parsed.data.can_manage_employees,
-    p_can_manage_documents: parsed.data.can_manage_documents,
-    p_can_resolve_requests: parsed.data.can_resolve_requests
-  });
-  if (error) {
-    if (isNewUser) {
-      const { error: cleanupError } = await admin.auth.admin.deleteUser(targetUser.id);
-      if (cleanupError) {
-        console.error("hr_admin_invitation_cleanup_failed");
-        return { ok: false, error: "Falló el alta y no se pudo limpiar la invitación. Contactá al administrador del sistema." };
-      }
-    }
-    return {
-      ok: false,
-      error: isNewUser
-        ? "No se pudo asignar el rol y la empresa. La invitación fue cancelada."
-        : "La cuenta existe, pero no se pudo asignar el rol y la empresa. Revisá si ya tiene un perfil o rol."
-    };
-  }
-  revalidatePath("/admin/configuracion");
-  return { ok: true, invitationSent: isNewUser };
 }
 
 export async function resendUserSetupAction(userId: string): Promise<AdminUserActionResult> {
@@ -145,7 +38,7 @@ export async function resendUserSetupAction(userId: string): Promise<AdminUserAc
   if (reopenError) return { ok: false, error: "No se pudo reabrir el alta del usuario." };
 
   const { error } = await auth.supabase.auth.resetPasswordForEmail(target.email, {
-    redirectTo: getAuthRedirectUrl("/auth/callback?next=/registro")
+    redirectTo: getAuthRedirectUrl("/auth/callback?next=/completar-alta")
   });
   if (error) {
     console.error("user_setup_email_failed", { code: error.code ?? "unknown", status: error.status ?? 0 });
@@ -184,14 +77,24 @@ export async function configureCompanyAccessAction(input: unknown): Promise<Admi
     p_can_manage_documents: parsed.data.can_manage_documents,
     p_can_resolve_requests: parsed.data.can_resolve_requests
   });
-  if (error) return { ok: false, error: "No se pudo actualizar la asignación de empresa." };
+  if (error) {
+    console.error("user_company_access_update_failed", error.code ?? "unknown");
+    return {
+      ok: false,
+      error: error.code === "23503"
+        ? "La empresa seleccionada ya no está disponible."
+        : error.code === "42501"
+          ? "No se pudo actualizar: verificá que la cuenta tenga rol de RR. HH. o Gerente."
+          : "No se pudo actualizar la asignación de empresa."
+    };
+  }
   revalidatePath("/admin/configuracion");
   revalidatePath("/admin");
   return { ok: true };
 }
 
 export async function configureRoleAction(userId: string, role: AppRole): Promise<AdminUserActionResult> {
-  if (!z.string().uuid().safeParse(userId).success || !["EMPLEADO", "RRHH_ADMIN", "SUPERADMIN"].includes(role)) {
+  if (!z.string().uuid().safeParse(userId).success || !["EMPLEADO", "GERENTE", "RRHH_ADMIN", "SUPERADMIN"].includes(role)) {
     return { ok: false, error: "El usuario o rol no es válido." };
   }
   const auth = await getSuperadminClient();

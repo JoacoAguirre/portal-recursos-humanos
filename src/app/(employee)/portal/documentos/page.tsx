@@ -6,14 +6,18 @@ import { requireUser } from "@/lib/auth/require-user";
 import { createClient } from "@/lib/supabase/server";
 import { addCalendarDays, formatDate, todayInTimeZone } from "@/lib/utils";
 
-export default async function MyDocumentsPage() {
+export default async function MyDocumentsPage({ searchParams }: { searchParams: Promise<{ documento?: string }> }) {
   await requireUser(["EMPLEADO"]);
+  const params = await searchParams;
+  const selectedDocument = /^[0-9a-f-]{36}$/i.test(params.documento ?? "") ? params.documento : null;
   const supabase = await createClient();
-  const { data: documents, error } = await supabase
+  let documentQuery = supabase
     .from("employee_documents")
     .select("id, document_type, issue_date, expiration_date, expiration_unknown, notes")
     .eq("active", true)
     .order("expiration_date", { ascending: true, nullsFirst: false });
+  if (selectedDocument) documentQuery = documentQuery.eq("id", selectedDocument);
+  const { data: documents, error } = await documentQuery;
   if (error) throw new Error("No se pudieron cargar tus documentos.");
   const today = todayInTimeZone();
   const nextMonth = addCalendarDays(today, 30);
@@ -35,7 +39,7 @@ export default async function MyDocumentsPage() {
                     : document.expiration_date <= nextMonth ? "Próximo a vencer" : "Vigente";
                 const tone = status === "Vencido" ? "danger" : status === "Próximo a vencer" || status === "Vencimiento desconocido" ? "warning" : "success";
                 return (
-                  <div key={document.id} className="flex items-start gap-3 rounded-xl border border-slate-700 p-4">
+                  <div id={document.id} key={document.id} className={`flex items-start gap-3 rounded-xl border p-4 ${document.id === selectedDocument ? "border-blue-400 bg-blue-500/10" : "border-slate-700"}`}>
                     <span className="rounded-lg bg-blue-500/10 p-2 text-blue-300"><FileText className="h-5 w-5" /></span>
                     <div className="min-w-0 flex-1">
                       <p className="font-medium">{document.document_type}</p>

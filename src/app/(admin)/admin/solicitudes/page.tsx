@@ -17,9 +17,9 @@ const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}
 export default async function AdminRequestsPage({
   searchParams
 }: {
-  searchParams: Promise<{ estado?: string; tipo?: string; empresa?: string; q?: string; page?: string }>;
+  searchParams: Promise<{ estado?: string; tipo?: string; empresa?: string; q?: string; page?: string; cambio?: string }>;
 }) {
-  await requireUser(["RRHH_ADMIN", "SUPERADMIN"]);
+  const user = await requireUser(["RRHH_ADMIN", "GERENTE", "SUPERADMIN"]);
   const params = await searchParams;
   const supabase = await createClient();
   const { data: companies, error: companyError } = await supabase.from("companies").select("id, name").eq("active", true).order("name");
@@ -28,6 +28,7 @@ export default async function AdminRequestsPage({
   const type = types.includes(params.tipo as RequestType) ? params.tipo as RequestType : null;
   const requestedCompanyId = params.empresa ?? "";
   const companyId = uuidPattern.test(requestedCompanyId) && companies?.some((company) => company.id === requestedCompanyId) ? requestedCompanyId : null;
+  const personalChangeId = uuidPattern.test(params.cambio ?? "") ? params.cambio : null;
   const search = (params.q ?? "").replace(/[^a-zA-Z0-9 áéíóúÁÉÍÓÚñÑ.-]/g, "").trim().slice(0, 60);
   const pageSize = 20;
   const page = Math.max(1, Math.min(10000, Number.parseInt(params.page ?? "1", 10) || 1));
@@ -76,9 +77,10 @@ export default async function AdminRequestsPage({
   let changesQuery = supabase
     .from("personal_data_change_requests")
     .select("id, employee_id, company_id, requested_data, status, created_at")
-    .in("status", ["pending", "in_review", "observed"])
     .order("created_at", { ascending: false })
     .limit(20);
+  if (personalChangeId) changesQuery = changesQuery.eq("id", personalChangeId);
+  else changesQuery = changesQuery.in("status", ["pending", "in_review", "observed"]);
   if (companyId) changesQuery = changesQuery.eq("company_id", companyId);
   const { data: changes, error: changesError } = await changesQuery;
   if (changesError) throw new Error("No se pudieron consultar las solicitudes de actualización de datos.");
@@ -89,12 +91,13 @@ export default async function AdminRequestsPage({
   if (changeEmployeesError) throw new Error("No se pudieron cargar los datos de las solicitudes de cambio.");
   const changeEmployeeMap = new Map((changeEmployees ?? []).map((employee) => [employee.id, employee]));
 
-  return <RequestsContent rows={rows} count={count ?? 0} page={page} pageSize={pageSize} companies={companies ?? []} selected={{ status, type, companyId, search }} personalChanges={(changes ?? []).map((change) => ({ ...change, employee: changeEmployeeMap.get(change.employee_id) }))} />;
+  return <RequestsContent rows={rows} count={count ?? 0} page={page} pageSize={pageSize} companies={companies ?? []} selected={{ status, type, companyId, search }} personalChanges={(changes ?? []).map((change) => ({ ...change, employee: changeEmployeeMap.get(change.employee_id) }))} readOnly={user.role === "GERENTE"} />;
 }
 
 function RequestsContent({
   rows, count, page, pageSize, companies,   selected,
-  personalChanges
+  personalChanges,
+  readOnly
 }: {
   rows: AdminRequestRow[];
   count: number;
@@ -109,6 +112,7 @@ function RequestsContent({
     created_at: string;
     employee?: { first_name: string; last_name: string; employee_number: string | null };
   }[];
+  readOnly: boolean;
 }) {
   const totalPages = Math.max(1, Math.ceil(count / pageSize));
   const params = new URLSearchParams();
@@ -121,7 +125,7 @@ function RequestsContent({
 
   return (
     <div className="space-y-6">
-      <div><h1 className="text-2xl font-semibold">Solicitudes</h1><p className="mt-2 text-sm text-muted-foreground">Filtrá, revisá y resolvé solicitudes de las empresas habilitadas.</p></div>
+      <div><h1 className="text-2xl font-semibold">Solicitudes</h1><p className="mt-2 text-sm text-muted-foreground">{readOnly ? "Consultá las solicitudes de las empresas asignadas." : "Filtrá, revisá y resolvé solicitudes de las empresas habilitadas."}</p></div>
       <form className="grid gap-3 rounded-xl border bg-card p-4 sm:grid-cols-2 xl:grid-cols-5">
         <div className="space-y-1.5"><label htmlFor="q" className="text-xs text-muted-foreground">Empleado o legajo</label><input id="q" name="q" defaultValue={selected.search} maxLength={60} className="h-10 rounded-lg border bg-slate-900 px-3 text-sm" /></div>
         <div className="space-y-1.5"><label htmlFor="empresa" className="text-xs text-muted-foreground">Empresa</label><select id="empresa" name="empresa" defaultValue={selected.companyId ?? ""} className="h-10 w-full rounded-lg border bg-slate-900 px-3 text-sm"><option value="">Todas</option>{companies.map((company) => <option key={company.id} value={company.id}>{company.name}</option>)}</select></div>
@@ -139,7 +143,7 @@ function RequestsContent({
                 <Badge tone={change.status === "observed" ? "warning" : "muted"}>{change.status.replace("_", " ")}</Badge>
               </div>
               <dl className="mt-4 grid gap-2 sm:grid-cols-3">{Object.entries(change.requested_data).map(([field, value]) => <div key={field} className="rounded-lg bg-slate-900/60 p-3"><dt className="text-xs text-muted-foreground">{personalFieldLabel(field)}</dt><dd className="mt-1 break-words text-sm">{String(value)}</dd></div>)}</dl>
-              <ResolvePersonalChangeButton id={change.id} />
+              {!readOnly && ["pending", "in_review", "observed"].includes(change.status) && <ResolvePersonalChangeButton id={change.id} />}
             </CardContent></Card>
           ))}
         </section>
@@ -150,7 +154,7 @@ function RequestsContent({
             <table className="w-full min-w-[850px] text-left text-sm">
               <thead className="border-b border-slate-700 bg-slate-900/40 text-xs uppercase text-muted-foreground"><tr><th className="px-5 py-3 font-medium">Empleado</th><th className="px-4 py-3 font-medium">Empresa</th><th className="px-4 py-3 font-medium">Tipo</th><th className="px-4 py-3 font-medium">Fecha</th><th className="px-4 py-3 font-medium">Estado</th><th className="px-5 py-3" /></tr></thead>
               <tbody className="divide-y divide-slate-700">
-                {rows.map((request) => <tr key={request.id} className="hover:bg-slate-800/30"><td className="px-5 py-4"><p className="font-medium">{request.employeeName}</p><p className="mt-1 text-xs text-muted-foreground">Legajo {request.employeeNumber ?? "—"}</p></td><td className="px-4 py-4">{request.companyName}</td><td className="px-4 py-4">{requestTypeLabels[request.request_type]}</td><td className="px-4 py-4">{formatDate(request.created_at)}</td><td className="px-4 py-4"><StatusBadge status={request.status} /></td><td className="px-5 py-4 text-right"><Link className="text-blue-400 hover:text-blue-300" href={`/admin/solicitudes/${request.id}`}>Revisar</Link></td></tr>)}
+                {rows.map((request) => <tr key={request.id} className="hover:bg-slate-800/30"><td className="px-5 py-4"><p className="font-medium">{request.employeeName}</p><p className="mt-1 text-xs text-muted-foreground">Legajo {request.employeeNumber ?? "—"}</p></td><td className="px-4 py-4">{request.companyName}</td><td className="px-4 py-4">{requestTypeLabels[request.request_type]}</td><td className="px-4 py-4">{formatDate(request.created_at)}</td><td className="px-4 py-4"><StatusBadge status={request.status} /></td><td className="px-5 py-4 text-right"><Link className="text-blue-400 hover:text-blue-300" href={`/admin/solicitudes/${request.id}`}>{readOnly ? "Ver" : "Revisar"}</Link></td></tr>)}
               </tbody>
             </table>
           </div>

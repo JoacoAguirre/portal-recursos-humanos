@@ -8,6 +8,7 @@ import {
   requestSubmissionSchema,
   validateRequestPayload
 } from "@/lib/validations/requests";
+import { isDateAtLeastDaysAhead, todayInTimeZone } from "@/lib/utils";
 
 export type ActionResult = { ok: true; id?: string } | { ok: false; error: string };
 
@@ -29,6 +30,13 @@ export async function createRequestAction(input: unknown): Promise<ActionResult>
   if (!payloadResult.success) {
     return { ok: false, error: payloadResult.error.issues[0]?.message ?? "Los datos no son válidos." };
   }
+  if (
+    (parsed.data.request_type === "leave" || parsed.data.request_type === "vacation") &&
+    typeof payloadResult.data.start_date === "string" &&
+    !isDateAtLeastDaysAhead(payloadResult.data.start_date, todayInTimeZone(), 30)
+  ) {
+    return { ok: false, error: "Las solicitudes deben presentarse con al menos 30 días de anticipación." };
+  }
 
   try {
     const auth = await authenticatedClient();
@@ -36,7 +44,7 @@ export async function createRequestAction(input: unknown): Promise<ActionResult>
     const { supabase, user } = auth;
     const [{ data: role, error: roleError }, { data: profile, error: profileError }] = await Promise.all([
       supabase.rpc("get_my_role"),
-      supabase.from("profiles").select("company_id, employment_status").eq("id", user.id).maybeSingle()
+      supabase.from("profiles").select("company_id, employment_status, hire_date").eq("id", user.id).maybeSingle()
     ]);
     if (roleError || profileError) return { ok: false, error: "No se pudo validar tu acceso." };
     if (role !== "EMPLEADO" || !profile || profile.employment_status === "inactive" || !profile.company_id) {
@@ -55,6 +63,12 @@ export async function createRequestAction(input: unknown): Promise<ActionResult>
       .single();
     if (error || !data) {
       console.error("create_request_failed", error?.code ?? "unknown");
+      if (error?.code === "23514" && error.message.includes("solicitud supera")) {
+        return { ok: false, error: error.message };
+      }
+      if (error?.code === "23514" && error.message.includes("30 días")) {
+        return { ok: false, error: "Las solicitudes deben presentarse con al menos 30 días de anticipación." };
+      }
       return { ok: false, error: "No se pudo guardar la solicitud. Revisá tu conexión e intentá nuevamente." };
     }
     revalidatePath("/portal");

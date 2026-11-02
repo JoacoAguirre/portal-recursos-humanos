@@ -4,9 +4,12 @@ import {
   BriefcaseBusiness,
   ClipboardList,
   FileText,
+  History,
   LayoutDashboard,
   LogOut,
+  ReceiptText,
   Settings,
+  UserPlus,
   Users
 } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
@@ -19,6 +22,7 @@ const employeeLinks = [
   { href: "/portal/solicitudes", label: "Mis solicitudes", icon: ClipboardList },
   { href: "/portal/solicitudes/nueva", label: "Nueva solicitud", icon: BriefcaseBusiness },
   { href: "/portal/documentos", label: "Mis documentos", icon: FileText },
+  { href: "/portal/recibos", label: "Recibos de sueldo", icon: ReceiptText },
   { href: "/portal/notificaciones", label: "Notificaciones", icon: Bell },
   { href: "/portal/perfil", label: "Mi perfil", icon: Users }
 ];
@@ -28,8 +32,10 @@ const adminLinks = [
   { href: "/admin/solicitudes", label: "Solicitudes", icon: ClipboardList },
   { href: "/admin/empleados", label: "Empleados", icon: Users },
   { href: "/admin/documentos", label: "Documentación", icon: FileText },
+  { href: "/admin/recibos", label: "Recibos de sueldo", icon: ReceiptText },
+  { href: "/admin/registros", label: "Altas pendientes", icon: UserPlus },
   { href: "/admin/notificaciones", label: "Notificaciones", icon: Bell },
-  { href: "/admin/historial", label: "Historial", icon: Bell },
+  { href: "/admin/historial", label: "Historial", icon: History },
   { href: "/admin/configuracion", label: "Configuración", icon: Settings }
 ];
 
@@ -51,6 +57,8 @@ export function AppShell({
       ? "Administración global"
       : role === "RRHH_ADMIN"
         ? "Recursos Humanos"
+        : role === "GERENTE"
+          ? "Gerencia · solo lectura"
         : "Portal del empleado"
   );
 
@@ -106,7 +114,7 @@ export function AppShell({
           </div>
           <div className="hidden text-right sm:block">
             <p className="text-sm font-medium">{fullName}</p>
-            <p className="text-xs text-muted-foreground">{role === "SUPERADMIN" ? "Superadministración" : role === "RRHH_ADMIN" ? "Recursos Humanos" : "Empleado"}</p>
+            <p className="text-xs text-muted-foreground">{role === "SUPERADMIN" ? "Superadministración" : role === "RRHH_ADMIN" ? "Recursos Humanos" : role === "GERENTE" ? "Gerencia · solo lectura" : "Empleado"}</p>
           </div>
         </header>
         <main className="mx-auto w-full max-w-7xl p-5 md:p-8">{children}</main>

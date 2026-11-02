@@ -14,7 +14,7 @@ export default async function EmployeesPage({
 }: {
   searchParams: Promise<{ q?: string; empresa?: string; estado?: string; page?: string }>;
 }) {
-  const user = await requireUser(["RRHH_ADMIN", "SUPERADMIN"]);
+  const user = await requireUser(["RRHH_ADMIN", "GERENTE", "SUPERADMIN"]);
   const params = await searchParams;
   const supabase = await createClient();
   const [{ data: companyData, error: companiesError }, { data: accessRows, error: accessError }] = await Promise.all([
@@ -55,7 +55,7 @@ export default async function EmployeesPage({
     <div className="space-y-6">
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div><h1 className="text-2xl font-semibold">Empleados</h1><p className="mt-2 text-sm text-muted-foreground">Legajos activos y registros históricos de tus empresas.</p></div>
-        {manageableIds.size > 0 && <div className="flex flex-wrap gap-2">
+        {manageableIds.size > 0 && user.role !== "GERENTE" && <div className="flex flex-wrap gap-2">
           <Button asChild variant="secondary"><Link href="/admin/empleados/importar"><FileUp className="h-4 w-4" />Importar CSV</Link></Button>
           <Button asChild><Link href="/admin/empleados/nuevo"><Plus className="h-4 w-4" />Invitar empleado</Link></Button>
         </div>}

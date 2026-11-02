@@ -20,10 +20,12 @@ Comandos de validación: `npm run lint`, `npm run typecheck`, `npm test` y `npm 
 ## Supabase
 
 - Las migraciones en `supabase/migrations` crean las seis empresas, relaciones, restricciones, funciones de autorización, políticas RLS y el bucket privado `hr-private`.
-- No se habilita el alta pública. Cree usuarios mediante invitación desde Auth y asigne el rol/empresa desde un entorno administrativo controlado.
+- El formulario de registro crea cuentas confirmadas sin enviar correo de verificación, registra la empresa elegida por el empleado y deja la cuenta sin rol ni perfil hasta que RR. HH. la aprueba desde **Administración → Altas pendientes**. RR. HH. confirma la empresa al aprobar. No habilite el registro público de Supabase Auth.
 - Las funciones privilegiadas fijan `search_path`, validan `auth.uid()` y limitan `EXECUTE`; la clave `service_role` solo se usa en servidor para invitaciones y, opcionalmente, cron.
 - Los documentos nunca deben publicarse. El bucket es privado y las políticas validan la empresa y el empleado vinculados al registro del documento.
 - `/api/cron/document-expiry` genera avisos internos idempotentes para empleados y responsables de documentación; no envía correo ni WhatsApp.
+- Los recibos de sueldo se almacenan en `hr-private`, solo pueden ser consultados por el empleado y RR. HH. autorizado, y `/api/cron/payroll-retention` elimina archivos y registros con más de un año.
+- Las solicitudes de licencias y vacaciones requieren 30 días de anticipación. Las vacaciones otorgan 14 días hasta 5 años de antigüedad, 21 días con más de 5 y hasta 10 años, 28 días con más de 10 y hasta 20 años, y 35 días al superar los 20 años. Para quienes aún no cumplen seis meses, RR. HH. define el saldo.
 - `supabase/scripts/bootstrap-superadmin.sql` describe un procedimiento manual de bootstrap; requiere una cuenta Auth ya creada por un operador autorizado y no tiene endpoint público.
 
 ### Primer administrador
@@ -33,7 +35,9 @@ Comandos de validación: `npm run lint`, `npm run typecheck`, `npm test` y `npm 
 3. Aplique las migraciones y ejecute `supabase/scripts/bootstrap-superadmin.sql` en SQL Editor con el UUID de esa cuenta. El script aborta si el usuario no existe.
 4. Cambie la contraseña mediante el flujo seguro de Auth y mantenga acceso restringido al panel y al historial de cambios.
 
-No hay usuarios ni contraseñas predeterminados. Una vez iniciado el portal y configurada la clave de servidor, RR. HH. puede crear empleados desde **Administración → Empleados**; el sistema invita la cuenta de Auth y crea el legajo vinculado en la misma operación lógica. La invitación abre el formulario privado `/registro`, donde el usuario confirma sus datos personales y crea su contraseña. El alta se completa una sola vez; la recuperación de contraseña usa su flujo separado. El rol, la empresa, los permisos y los datos laborales quedan administrados por RR. HH. Un SUPERADMIN puede enviar un enlace para crear/restablecer contraseña desde **Configuración → Usuarios y roles**; los correos están sujetos a los límites del proveedor Auth. No habilite el registro público.
+No hay usuarios ni contraseñas predeterminados. Una vez iniciado el portal y configurada la clave de servidor, RR. HH. puede invitar empleados desde **Administración → Empleados**; el sistema crea el legajo con DNI y fecha de ingreso. Las invitaciones existentes usan `/completar-alta`. Los empleados también pueden solicitar una cuenta en `/registro`, elegir la empresa y esperar la aprobación de RR. HH., que confirma esa selección y vincula la cuenta por DNI con un legajo o crea uno nuevo antes de permitir el acceso. La recuperación de contraseña usa su flujo separado. Un SUPERADMIN puede enviar un enlace para crear/restablecer contraseña desde **Configuración → Usuarios y roles**.
+
+SUPERADMIN puede cambiar los roles y asignar una única empresa por usuario administrativo desde **Configuración → Usuarios y roles**; cambiar la empresa reemplaza el acceso anterior. El rol **GERENTE** permite consultar la vista administrativa de la empresa asignada, pero no modificar registros, resolver solicitudes, cargar documentos ni recibos. Las migraciones `202611020002_add_gerente_role.sql`, `202611020003_gerente_read_only_access.sql` y `202611020005_single_user_company_assignment.sql` agregan el rol, sus permisos de solo lectura y el reemplazo de asignaciones.
 
 ## Despliegue en Vercel
 
@@ -41,13 +45,13 @@ No hay usuarios ni contraseñas predeterminados. Una vez iniciado el portal y co
 2. Configure `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` y `NEXT_PUBLIC_SITE_URL` (origen HTTPS de la aplicación) como variables de entorno de producción/preview según corresponda.
 3. Ejecute las migraciones contra el proyecto Supabase antes de publicar.
 4. Configure las URLs de callback de Auth con el dominio de Vercel.
-5. Configure `SUPABASE_SERVICE_ROLE_KEY` únicamente como variable de servidor para que funcionen las invitaciones de empleados y administradores. Si habilita el cron de alertas, configure también `CRON_SECRET` solo en servidor y mantenga `vercel.json` con la ruta programada.
+5. Configure `SUPABASE_SERVICE_ROLE_KEY` únicamente como variable de servidor para que funcionen las invitaciones, aprobaciones y cargas privadas. Configure `CRON_SECRET` solo en servidor para los procesos de vencimientos y retención programados en `vercel.json`.
 
 Las claves `NEXT_PUBLIC_*` son públicas; nunca coloque una `service_role` en una variable pública o en el cliente.
 
 ## Datos y retención
 
-El seed es reproducible y solo contiene las seis empresas, no personas ficticias. Solicitudes, historial y auditoría usan borrado restringido; los perfiles y documentos se desactivan mediante estado/baja lógica. Defina y apruebe una política legal de retención antes de automatizar la eliminación de datos personales.
+El seed es reproducible y solo contiene las seis empresas, no personas ficticias. Solicitudes, historial y auditoría usan borrado restringido; los perfiles y documentos se desactivan mediante estado/baja lógica. Los recibos de sueldo se conservan durante un año y luego se eliminan mediante el cron de retención.
 
 ## Pruebas RLS
 
@@ -57,4 +61,4 @@ Las pruebas de integración se habilitan con `RUN_LOCAL_RLS_TESTS=true`, URL loc
 
 ## Importación de empleados
 
-Desde **Administración → Empleados → Importar CSV** se puede cargar un archivo UTF-8 de hasta 1 MB y 100 filas. Las columnas obligatorias son `email`, `first_name`, `last_name`, `employee_number` y `company_code`; `department`, `position`, `phone`, `address` y `hire_date` son opcionales. La fecha usa `AAAA-MM-DD` y el código de empresa debe estar activo y habilitado para quien importa. La vista previa valida el formato y muestra errores por fila; se detectan correos y legajos repetidos dentro del archivo, y las restricciones de la base de datos evitan duplicar legajos existentes. Cada fila se procesa individualmente, por lo que el reporte puede reflejar altas correctas junto con fallos parciales. Las invitaciones requieren `SUPABASE_SERVICE_ROLE_KEY` configurada solo en el servidor.
+Desde **Administración → Empleados → Importar CSV** se puede cargar un archivo UTF-8 de hasta 1 MB y 100 filas. Las columnas obligatorias son `email`, `first_name`, `last_name`, `dni`, `employee_number`, `company_code` y `hire_date`; `department`, `position`, `phone` y `address` son opcionales. La fecha usa `AAAA-MM-DD` y el código de empresa debe estar activo y habilitado para quien importa. La vista previa valida el formato y muestra errores por fila; se detectan correos, DNI y legajos repetidos dentro del archivo, y la base de datos impide duplicar DNI y legajos existentes. Cada fila se procesa individualmente, por lo que el reporte puede reflejar altas correctas junto con fallos parciales. Las invitaciones requieren `SUPABASE_SERVICE_ROLE_KEY` configurada solo en el servidor.
