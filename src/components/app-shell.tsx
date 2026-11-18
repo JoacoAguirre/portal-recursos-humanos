@@ -2,6 +2,7 @@ import Link from "next/link";
 import {
   Bell,
   BriefcaseBusiness,
+  ChevronDown,
   ClipboardList,
   FileText,
   History,
@@ -10,7 +11,8 @@ import {
   ReceiptText,
   Settings,
   UserPlus,
-  Users
+  Users,
+  UserRoundSearch
 } from "lucide-react";
 import { logoutAction } from "@/app/actions/auth";
 import { AuthenticatedUser } from "@/lib/auth/require-user";
@@ -27,16 +29,36 @@ const employeeLinks = [
   { href: "/portal/perfil", label: "Mi perfil", icon: Users }
 ];
 
-const adminLinks = [
-  { href: "/admin", label: "Tablero", icon: LayoutDashboard },
-  { href: "/admin/solicitudes", label: "Solicitudes", icon: ClipboardList },
-  { href: "/admin/empleados", label: "Empleados", icon: Users },
-  { href: "/admin/documentos", label: "Documentación", icon: FileText },
-  { href: "/admin/recibos", label: "Recibos de sueldo", icon: ReceiptText },
-  { href: "/admin/registros", label: "Altas pendientes", icon: UserPlus },
-  { href: "/admin/notificaciones", label: "Notificaciones", icon: Bell },
-  { href: "/admin/historial", label: "Historial", icon: History },
-  { href: "/admin/configuracion", label: "Configuración", icon: Settings }
+const adminLinkGroups = (showVacancies: boolean) => [
+  {
+    label: "Inicio",
+    links: [{ href: "/admin", label: "Tablero", icon: LayoutDashboard }]
+  },
+  {
+    label: "Personas y selección",
+    links: [
+      { href: "/admin/empleados", label: "Empleados", icon: Users },
+      { href: "/admin/registros", label: "Altas pendientes", icon: UserPlus },
+      { href: "/admin/postulantes", label: "Postulantes", icon: UserRoundSearch },
+      ...(showVacancies ? [{ href: "/admin/vacantes", label: "Vacantes", icon: BriefcaseBusiness }] : [])
+    ]
+  },
+  {
+    label: "Gestión",
+    links: [
+      { href: "/admin/solicitudes", label: "Solicitudes", icon: ClipboardList },
+      { href: "/admin/documentos", label: "Documentación", icon: FileText },
+      { href: "/admin/recibos", label: "Recibos de sueldo", icon: ReceiptText }
+    ]
+  },
+  {
+    label: "Sistema",
+    links: [
+      { href: "/admin/notificaciones", label: "Notificaciones", icon: Bell },
+      { href: "/admin/historial", label: "Historial", icon: History },
+      { href: "/admin/configuracion", label: "Configuración", icon: Settings }
+    ]
+  }
 ];
 
 export function AppShell({
@@ -49,7 +71,9 @@ export function AppShell({
   children: React.ReactNode;
 }) {
   const isAdmin = role !== "EMPLEADO";
-  const links = isAdmin ? adminLinks : employeeLinks;
+  const linkGroups = isAdmin
+    ? adminLinkGroups(role !== "GERENTE")
+    : [{ label: null, links: employeeLinks }];
   const fullName = `${user.profile.first_name} ${user.profile.last_name}`;
   const homeHref = isAdmin ? "/admin" : "/portal";
   const organizationLabel = user.companyName ?? (
@@ -77,15 +101,40 @@ export function AppShell({
           </Link>
         </div>
         <nav aria-label="Navegación principal" className="flex gap-1 overflow-x-auto px-3 pb-3 md:flex-1 md:flex-col md:overflow-visible md:py-3">
-          {links.map(({ href, label, icon: Icon }) => (
-            <Link
-              key={href}
-              href={href}
-              className="flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
-            >
-              <Icon className="h-4 w-4" aria-hidden="true" />
-              {label}
-            </Link>
+          {linkGroups.map(({ label: groupLabel, links }) => (
+            groupLabel ? (
+              <details key={groupLabel} open className="group shrink-0 md:shrink">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-3 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-400 transition hover:bg-slate-800 hover:text-white [&::-webkit-details-marker]:hidden">
+                  {groupLabel}
+                  <ChevronDown className="h-4 w-4 shrink-0 transition-transform group-open:rotate-180" aria-hidden="true" />
+                </summary>
+                <div className="mt-1 flex gap-1 md:flex-col">
+                  {links.map(({ href, label, icon: Icon }) => (
+                    <Link
+                      key={href}
+                      href={href}
+                      className="flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                    >
+                      <Icon className="h-4 w-4" aria-hidden="true" />
+                      {label}
+                    </Link>
+                  ))}
+                </div>
+              </details>
+            ) : (
+              <div key="employee" className="contents md:flex md:flex-col md:gap-1">
+                {links.map(({ href, label, icon: Icon }) => (
+                  <Link
+                    key={href}
+                    href={href}
+                    className="flex shrink-0 items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-slate-300 transition hover:bg-slate-800 hover:text-white"
+                  >
+                    <Icon className="h-4 w-4" aria-hidden="true" />
+                    {label}
+                  </Link>
+                ))}
+              </div>
+            )
           ))}
         </nav>
         <div className="hidden border-t border-slate-800 p-4 md:block">

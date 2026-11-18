@@ -1,5 +1,7 @@
 import type { Metadata } from "next";
 import { LoginForm } from "@/components/auth/login-form";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Ingresar" };
 
@@ -30,6 +32,9 @@ export default function LoginPage() {
           <h2 className="text-2xl font-semibold">Iniciá sesión</h2>
           <p className="mt-2 text-sm text-muted-foreground">Ingresá con tu cuenta corporativa.</p>
           <LoginForm />
+          <Button asChild variant="secondary" className="mt-4 w-full">
+            <Link href="/postular">No soy empleado</Link>
+          </Button>
           <p className="mt-5 text-center text-sm text-muted-foreground">
             ¿Todavía no tenés cuenta? <a href="/registro" className="text-blue-300 hover:text-blue-200">Registrate</a>
           </p>

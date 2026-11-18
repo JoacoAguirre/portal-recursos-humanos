@@ -62,6 +62,27 @@ export type Database = {
     Tables: {
       companies: Table<Company>;
       profiles: Table<Profile>;
+      job_vacancies: Table<{
+        id: string;
+        company_id: string;
+        title: string;
+        description: string | null;
+        active: boolean;
+        created_at: string;
+        updated_at: string;
+      }>;
+      job_applications: Table<{
+        id: string;
+        first_name: string;
+        last_name: string;
+        dni: string;
+        phone: string;
+        company_id: string;
+        vacancy_id: string | null;
+        is_spontaneous: boolean;
+        cv_storage_path: string;
+        created_at: string;
+      }>;
       employee_registration_requests: Table<{
         id: string;
         auth_user_id: string | null;

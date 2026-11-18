@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { EmployeeRegistrationForm } from "@/components/auth/employee-registration-form";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { Button } from "@/components/ui/button";
 
 export const metadata: Metadata = { title: "Crear cuenta" };
 
@@ -19,6 +20,9 @@ export default async function RegistrationPage() {
           Registrate con tus datos personales. Recursos Humanos deberá aprobar el alta antes de habilitar el acceso.
         </p>
         <EmployeeRegistrationForm companies={companies ?? []} />
+        <Button asChild variant="secondary" className="mt-4 w-full">
+          <Link href="/postular">No soy empleado</Link>
+        </Button>
         <p className="mt-6 text-center text-sm text-muted-foreground">
           ¿Ya tenés cuenta?{" "}
           <Link href="/login" className="font-medium text-blue-300 transition hover:text-blue-200">
